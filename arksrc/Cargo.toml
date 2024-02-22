@@ -21,6 +21,7 @@ gsark-common = { path = "../common" }
 
 anyhow = { workspace = true }
 bytes = { workspace = true }
+dash-pipe-provider = { workspace = true }
 gst = { workspace = true }
 gst-base = { workspace = true }
 gst-video = { workspace = true }

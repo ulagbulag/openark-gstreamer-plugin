@@ -2,6 +2,7 @@ use std::time::Duration;
 
 use anyhow::Result;
 use bytes::Bytes;
+use dash_pipe_provider::messengers::Subscriber;
 use gsark_common::client;
 use gst::{
     glib::{
@@ -191,7 +192,7 @@ impl Queue {
                             .await
                             .or_else(|error| match error {
                                 SendTimeoutError::Timeout(_) => Ok(()),
-                                _ => Err(error),
+                                SendTimeoutError::Closed(_) => Err(()),
                             })
                             .is_err()
                         {

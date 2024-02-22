@@ -1,6 +1,6 @@
 use anyhow::Result;
-use clap::Parser;
 use ark_core::tracer;
+use clap::Parser;
 use dash_pipe_provider::{PipeClient, PipeClientArgs};
 
 pub async fn try_init(otlp: bool) -> Result<PipeClient> {

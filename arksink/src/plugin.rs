@@ -2,7 +2,8 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use anyhow::{anyhow, Result};
 use bytes::Bytes;
-use dash_pipe_provider::{Codec, PipeMessage, PipePayload};
+use dash_pipe_provider::messengers::Publisher;
+use dash_pipe_provider::{PipeMessage, PipePayload};
 use gsark_common::client;
 use gst::{
     glib::{
@@ -14,6 +15,7 @@ use gst::{
 };
 use gst_base::subclass::prelude::BaseSinkImpl;
 use serde_json::json;
+use serde_json::Value;
 use tokio::{
     runtime::Runtime,
     sync::{mpsc, RwLock},
@@ -106,8 +108,7 @@ impl BaseSinkImpl for Plugin {
             let message = PipeMessage::with_payloads(vec![payload], value);
 
             // encode and send
-            let data = message.to_bytes(Codec::MessagePack).unwrap_or_default();
-            self.send(data)
+            self.send(message)
                 .await
                 .map(|()| FlowSuccess::Ok)
                 .map_err(|error| {
@@ -160,7 +161,7 @@ impl Plugin {
         }
     }
 
-    async fn send(&self, data: Bytes) -> Result<(), FlowError> {
+    async fn send(&self, data: PipeMessage<Value>) -> Result<(), FlowError> {
         self.queue
             .read()
             .await
@@ -181,7 +182,7 @@ impl Plugin {
 
 struct Queue {
     producer: JoinHandle<Result<()>>,
-    tx: mpsc::Sender<Bytes>,
+    tx: mpsc::Sender<PipeMessage<Value>>,
 }
 
 impl Queue {
@@ -193,7 +194,8 @@ impl Queue {
         Ok(Self {
             producer: runtime.spawn(async move {
                 while let Some(data) = rx.recv().await {
-                    publisher.send_one(data).await?;
+                    Publisher::<PipeMessage<Value>, PipeMessage<Value>>::send_one(&publisher, data)
+                        .await?;
                 }
                 Ok(())
             }),
@@ -201,7 +203,7 @@ impl Queue {
         })
     }
 
-    async fn send(&self, data: Bytes) -> Result<()> {
+    async fn send(&self, data: PipeMessage<Value>) -> Result<()> {
         self.tx
             .send(data)
             .await
