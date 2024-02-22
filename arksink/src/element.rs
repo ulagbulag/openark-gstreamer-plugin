@@ -19,8 +19,8 @@ impl ElementImpl for crate::plugin::Plugin {
         static PAD_TEMPLATES: Templates = Templates::new(|| {
             vec![{
                 gst::PadTemplate::new(
-                    "src",
-                    gst::PadDirection::Src,
+                    "sink",
+                    gst::PadDirection::Sink,
                     gst::PadPresence::Always,
                     &Caps::new_any(),
                 )

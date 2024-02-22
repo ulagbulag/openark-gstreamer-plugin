@@ -4,7 +4,7 @@ use gst::glib;
 /// and everything else that this plugin might provide (e.g. typefinders or device providers).
 fn plugin_init(plugin: &gst::Plugin) -> Result<(), glib::BoolError> {
     // ::arkfunc::register(plugin)?;
-    // ::arksink::register(plugin)?;
+    ::arksink::register(plugin)?;
     ::arksrc::register(plugin)?;
     Ok(())
 }

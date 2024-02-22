@@ -6,9 +6,9 @@ use gst::{glib, prelude::StaticType, Element, Object, Rank};
 use once_cell::sync::Lazy;
 
 pub mod metadata {
-    pub const CLASS: &str = "Source/Network";
-    pub const CLASS_NAME: &str = "ArkSrc";
-    pub const LONG_NAME: &str = "OpenARK message receiver";
+    pub const CLASS: &str = "Sink/Network";
+    pub const CLASS_NAME: &str = "ArkSink";
+    pub const LONG_NAME: &str = "OpenARK message sender";
 
     pub const AUTHORS: &str = env!("CARGO_PKG_AUTHORS");
     pub const DESCRIPTION: &str = env!("CARGO_PKG_DESCRIPTION");

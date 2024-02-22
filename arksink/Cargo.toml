@@ -1,8 +1,8 @@
 [package]
-name = "arksrc"
+name = "arksink"
 
 authors = { workspace = true }
-description = "Receive data over the network via UDP"
+description = "Send data over the network via OpenARK"
 documentation = { workspace = true }
 edition = { workspace = true }
 include = { workspace = true }
@@ -21,8 +21,10 @@ gsark-common = { path = "../common" }
 
 anyhow = { workspace = true }
 bytes = { workspace = true }
+dash-pipe-provider = { workspace = true }
 gst = { workspace = true }
 gst-base = { workspace = true }
 gst-video = { workspace = true }
 once-cell = { workspace = true }
+serde-json = { workspace = true }
 tokio = { workspace = true }

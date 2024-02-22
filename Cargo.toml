@@ -1,5 +1,5 @@
 [workspace]
-members = [".", "arksrc", "common"]
+members = [".", "arksink", "arksrc", "common"]
 resolver = "2"
 
 [workspace.package]
@@ -29,6 +29,7 @@ gst-plugin-version-helper = { version = "0.8" }
 gst-video = { package = "gstreamer-video", version = "0.22" }
 num-traits = { version = "0.2" }
 once-cell = { package = "once_cell", version = "1.19" }
+serde-json = { package = "serde_json", version = "1.0" }
 tokio = { version = "1", features = ["full"] }
 
 [patch.crates-io]
@@ -58,17 +59,17 @@ homepage = { workspace = true }
 repository = { workspace = true }
 version = { workspace = true }
 
+[lib]
+crate-type = ["cdylib"]
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 # arkfunc = { path = "arkfunc" }
-# arksink = { path = "arksink" }
+arksink = { path = "arksink" }
 arksrc = { path = "arksrc" }
 
 gst = { workspace = true }
 
 [build-dependencies]
 gst-plugin-version-helper = { workspace = true }
-
-[lib]
-crate-type = ["cdylib"]
