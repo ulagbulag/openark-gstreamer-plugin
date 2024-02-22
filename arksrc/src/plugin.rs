@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use anyhow::Result;
 use bytes::Bytes;
 use gsark_common::client;
@@ -15,7 +17,10 @@ use gst_base::subclass::{
 };
 use tokio::{
     runtime::Runtime,
-    sync::{mpsc, Mutex, RwLock},
+    sync::{
+        mpsc::{self, error::SendTimeoutError},
+        Mutex, RwLock,
+    },
     task::JoinHandle,
 };
 
@@ -171,10 +176,9 @@ impl Queue {
         let client = client::try_init(otlp).await?;
         let mut subscriber = client.subscribe(model.parse()?).await?;
 
-        let (tx, rx) = mpsc::channel(2);
+        let (tx, rx) = mpsc::channel(4);
         Ok(Self {
             producer: runtime.spawn(async move {
-                // FIXME: add `Drop` flag to always take the latest images
                 loop {
                     if let Some(data) = subscriber
                         .read_one()
@@ -182,7 +186,15 @@ impl Queue {
                         .and_then(|mut msg| msg.payloads.pop())
                         .and_then(|payload| payload.value().cloned())
                     {
-                        if tx.send(data).await.is_err() {
+                        if tx
+                            .send_timeout(data, Duration::from_millis(10))
+                            .await
+                            .or_else(|error| match error {
+                                SendTimeoutError::Timeout(_) => Ok(()),
+                                _ => Err(error),
+                            })
+                            .is_err()
+                        {
                             // Queue is destroying, stop sending.
                             break Ok(());
                         }
