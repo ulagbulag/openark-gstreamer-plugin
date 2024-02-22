@@ -194,8 +194,14 @@ impl Queue {
         Ok(Self {
             producer: runtime.spawn(async move {
                 while let Some(data) = rx.recv().await {
-                    Publisher::<PipeMessage<Value>, PipeMessage<Value>>::send_one(&publisher, data)
-                        .await?;
+                    if let Err(error) =
+                        Publisher::<PipeMessage<Value>, PipeMessage<Value>>::send_one(
+                            &publisher, data,
+                        )
+                        .await
+                    {
+                        gst::error!(crate::CAT, "Failed to send data: {error}",);
+                    }
                 }
                 Ok(())
             }),

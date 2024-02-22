@@ -181,23 +181,24 @@ impl Queue {
         Ok(Self {
             producer: runtime.spawn(async move {
                 loop {
-                    if let Some(data) = subscriber
-                        .read_one()
-                        .await?
-                        .and_then(|mut msg| msg.payloads.pop())
-                        .and_then(|payload| payload.value().cloned())
-                    {
-                        if tx
-                            .send_timeout(data, Duration::from_millis(10))
-                            .await
-                            .or_else(|error| match error {
-                                SendTimeoutError::Timeout(_) => Ok(()),
-                                SendTimeoutError::Closed(_) => Err(()),
-                            })
-                            .is_err()
-                        {
-                            // Queue is destroying, stop sending.
-                            break Ok(());
+                    match subscriber.read_one().await {
+                        Ok(Some(mut msg)) => {
+                            if let Some(data) = msg
+                                .payloads
+                                .pop()
+                                .and_then(|payload| payload.value().cloned())
+                            {
+                                match tx.send_timeout(data, Duration::from_millis(10)).await {
+                                    Ok(()) | Err(SendTimeoutError::Timeout(_)) => continue,
+                                    // Queue is destroying, stop sending.
+                                    Err(SendTimeoutError::Closed(_)) => break Ok(()),
+                                }
+                            }
+                        }
+                        // Subscriber is destroying, stop sending.
+                        Ok(None) => break Ok(()),
+                        Err(error) => {
+                            gst::error!(crate::CAT, "Failed to receive data: {error}",);
                         }
                     }
                 }
@@ -212,9 +213,7 @@ impl Queue {
 
     async fn stop(mut self) -> Result<()> {
         self.rx.close();
-        self.producer
-            .await
-            .map_err(Into::into)
-            .and_then(::core::convert::identity)
+        self.producer.abort();
+        self.producer.await.unwrap_or(Ok(()))
     }
 }
