@@ -1,7 +1,6 @@
 mod args;
 mod element;
 mod plugin;
-mod state;
 
 use gst::{glib, prelude::StaticType, Element, Object, Rank};
 use once_cell::sync::Lazy;

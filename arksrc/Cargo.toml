@@ -20,9 +20,9 @@ version = { workspace = true }
 gsark-common = { path = "../common" }
 
 anyhow = { workspace = true }
+bytes = { workspace = true }
 gst = { workspace = true }
 gst-base = { workspace = true }
 gst-video = { workspace = true }
-image = { workspace = true }
 once-cell = { workspace = true }
 tokio = { workspace = true }

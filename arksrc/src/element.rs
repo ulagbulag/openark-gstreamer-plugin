@@ -1,5 +1,4 @@
-use gsark_common::pad;
-use gst::subclass::prelude::ElementImpl;
+use gst::{subclass::prelude::ElementImpl, Caps};
 use once_cell::sync::Lazy;
 
 /// Implementation of gst::Element virtual methods
@@ -28,7 +27,17 @@ impl ElementImpl for crate::plugin::Plugin {
     ///
     /// Our element here can convert BGRx to BGRx or GRAY8, both being grayscale.
     fn pad_templates() -> &'static [gst::PadTemplate] {
-        static PAD_TEMPLATES: Templates = Templates::new(|| vec![pad::src::template()]);
+        static PAD_TEMPLATES: Templates = Templates::new(|| {
+            vec![{
+                gst::PadTemplate::new(
+                    "src",
+                    gst::PadDirection::Src,
+                    gst::PadPresence::Always,
+                    &Caps::new_any(),
+                )
+                .unwrap()
+            }]
+        });
 
         PAD_TEMPLATES.as_ref()
     }

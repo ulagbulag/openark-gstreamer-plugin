@@ -19,6 +19,7 @@ version = "0.1.0"
 [workspace.dependencies]
 ark-core = { git = "https://github.com/ulagbulag/OpenARK.git" }
 anyhow = { version = "1.0", features = ["backtrace"] }
+bytes = { version = "1.5" }
 clap = { version = "4.5" }
 dash-pipe-provider = { git = "https://github.com/ulagbulag/OpenARK.git" }
 gst = { package = "gstreamer", version = "0.22" }
@@ -26,7 +27,6 @@ gst-audio = { package = "gstreamer-audio", version = "0.22" }
 gst-base = { package = "gstreamer-base", version = "0.22" }
 gst-plugin-version-helper = { version = "0.8" }
 gst-video = { package = "gstreamer-video", version = "0.22" }
-image = { version = "0.24" }
 num-traits = { version = "0.2" }
 once-cell = { package = "once_cell", version = "1.19" }
 tokio = { version = "1", features = ["full"] }

@@ -24,11 +24,11 @@ MY_VIDEO_MODEL='image'
 
 # Test the video upstreaming (in the background)
 gst-launch-1.0 videotestsrc \
-    ! videoconvert \
+    ! jpegenc \
     ! arksink model="${MY_VIDEO_MODEL}" &
 
 # Test the video downstreaming
 gst-launch-1.0 arksrc model="${MY_VIDEO_MODEL}" \
-    ! videoconvert \
+    ! jpegdec \
     ! autovideosink
 ```
