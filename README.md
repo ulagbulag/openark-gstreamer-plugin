@@ -5,6 +5,7 @@
 ### Development Environment
 
 - [GStreamer Libs](https://gitlab.freedesktop.org/gstreamer/gstreamer-rs/blob/main/README.md#installation)
+- [Make](https://www.gnu.org/software/make/manual/make.html)
 - [OpenARK](https://github.com/ulagbulag/OpenARK/tree/master/templates/bootstrap)
 - [Rust](https://www.rust-lang.org/tools/install)
 
@@ -13,11 +14,14 @@
 In your OpenARK VINE Desktop (aka. `MobileX Station`),
 
 ```sh
-# Configure environment variables
-export GST_PLUGIN_PATH="$(pwd)/target/release"
+# Initialize (Install dependencies)
+make init
 
 # Build gstreamer plugin
-cargo b --release
+make build
+
+# Configure environment variables
+export GST_PLUGIN_PATH="$(pwd)/target/release"
 
 # Configure your test model
 MY_VIDEO_MODEL='image'
