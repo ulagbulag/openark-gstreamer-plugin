@@ -3,7 +3,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use anyhow::{anyhow, Result};
 use bytes::Bytes;
 use dash_openapi::image::Image;
-use dash_pipe_provider::{messengers::Publisher, Codec, PipeMessage, PipePayload};
+use dash_pipe_provider::{messengers::Publisher, PipeMessage, PipePayload};
 use gsark_common::client;
 use gst::{
     glib::{
@@ -14,7 +14,6 @@ use gst::{
     Buffer, CoreError, ErrorMessage, FlowError, FlowSuccess,
 };
 use gst_base::subclass::prelude::BaseSinkImpl;
-use serde_json::json;
 use tokio::{
     runtime::Runtime,
     sync::{mpsc, RwLock},
@@ -101,14 +100,12 @@ impl BaseSinkImpl for Plugin {
             );
 
             // build a message
-            let value = json! ({
-                "image": key_ref,
-            });
+            // TODO: to be implemented
+            let value = Image::default();
             let message = PipeMessage::with_payloads(vec![payload], value);
 
             // encode and send
-            let data = message.to_bytes(Codec::MessagePack).unwrap_or_default();
-            self.send(data)
+            self.send(message)
                 .await
                 .map(|()| FlowSuccess::Ok)
                 .map_err(|error| {
@@ -161,7 +158,7 @@ impl Plugin {
         }
     }
 
-    async fn send(&self, data: Bytes) -> Result<(), FlowError> {
+    async fn send(&self, data: PipeMessage<Image>) -> Result<(), FlowError> {
         self.queue
             .read()
             .await
@@ -194,7 +191,11 @@ impl Queue {
         Ok(Self {
             producer: runtime.spawn(async move {
                 while let Some(data) = rx.recv().await {
-                    Publisher::<_, PipeMessage<Image>>::send_one(&publisher, data).await?;
+                    if let Err(error) =
+                        Publisher::<_, PipeMessage<Image>>::send_one(&publisher, data).await
+                    {
+                        gst::error!(crate::CAT, "Failed to send data: {error}",);
+                    }
                 }
                 Ok(())
             }),
@@ -202,13 +203,9 @@ impl Queue {
         })
     }
 
-    async fn send(&self, data: Bytes) -> Result<()> {
+    async fn send(&self, data: PipeMessage<Image>) -> Result<()> {
         self.tx
-            .send(PipeMessage::with_payloads(
-                vec![PipePayload::new("image".into(), Some(data))],
-                // TODO: to be implemented
-                Image::default(),
-            ))
+            .send(data)
             .await
             .map_err(|error| anyhow!("Failed to send data: {error}"))
     }
