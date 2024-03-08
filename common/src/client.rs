@@ -1,9 +1,10 @@
 use anyhow::Result;
-use clap::Parser;
 use ark_core::tracer;
+use clap::Parser;
+use dash_openapi::image::Image;
 use dash_pipe_provider::{PipeClient, PipeClientArgs};
 
-pub async fn try_init(otlp: bool) -> Result<PipeClient> {
+pub async fn try_init(otlp: bool) -> Result<PipeClient<Image>> {
     tracer::init_once_with_default(otlp);
 
     // Do not parse arguments from command line,

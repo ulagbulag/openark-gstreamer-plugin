@@ -21,7 +21,12 @@ ark-core = { git = "https://github.com/ulagbulag/OpenARK.git" }
 anyhow = { version = "1.0", features = ["backtrace"] }
 bytes = { version = "1.5" }
 clap = { version = "4.5" }
-dash-pipe-provider = { git = "https://github.com/ulagbulag/OpenARK.git" }
+dash-openapi = { git = "https://github.com/ulagbulag/OpenARK.git" }
+dash-pipe-provider = { git = "https://github.com/ulagbulag/OpenARK.git", default-features = false, features = [
+    "deltalake", # metadata
+    "nats",      # messenger
+    "s3",        # storage
+] }
 gst = { package = "gstreamer", version = "0.22" }
 gst-audio = { package = "gstreamer-audio", version = "0.22" }
 gst-base = { package = "gstreamer-base", version = "0.22" }
@@ -33,15 +38,8 @@ serde-json = { package = "serde_json", version = "1.0" }
 tokio = { version = "1", features = ["full"] }
 
 [patch.crates-io]
-# FIXME: push a PR: rustls-tls feature support
-minio = { git = "https://github.com/ulagbulag/minio-rs.git" } # not deployed to crates.io
 # FIXME: Waiting for `opentelemetry-proto` to be released
-opentelemetry = { git = "https://github.com/ulagbulag/opentelemetry-rust", branch = "feat/schemars" }
-opentelemetry-otlp = { git = "https://github.com/ulagbulag/opentelemetry-rust", branch = "feat/schemars" }
-opentelemetry-proto = { git = "https://github.com/ulagbulag/opentelemetry-rust", branch = "feat/schemars" }
-opentelemetry_sdk = { git = "https://github.com/ulagbulag/opentelemetry-rust", branch = "feat/schemars" }
 schemars = { git = "https://github.com/ulagbulag/schemars" }
-tracing-opentelemetry = { git = "https://github.com/ulagbulag/tracing-opentelemetry", branch = "chore/histogram" }
 
 [package]
 name = "gsark"

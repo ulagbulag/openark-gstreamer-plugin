@@ -2,6 +2,7 @@ use std::time::Duration;
 
 use anyhow::Result;
 use bytes::Bytes;
+use dash_pipe_provider::messengers::Subscriber;
 use gsark_common::client;
 use gst::{
     glib::{

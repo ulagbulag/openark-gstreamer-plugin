@@ -2,7 +2,8 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use anyhow::{anyhow, Result};
 use bytes::Bytes;
-use dash_pipe_provider::{Codec, PipeMessage, PipePayload};
+use dash_openapi::image::Image;
+use dash_pipe_provider::{messengers::Publisher, Codec, PipeMessage, PipePayload};
 use gsark_common::client;
 use gst::{
     glib::{
@@ -181,7 +182,7 @@ impl Plugin {
 
 struct Queue {
     producer: JoinHandle<Result<()>>,
-    tx: mpsc::Sender<Bytes>,
+    tx: mpsc::Sender<PipeMessage<Image>>,
 }
 
 impl Queue {
@@ -193,7 +194,7 @@ impl Queue {
         Ok(Self {
             producer: runtime.spawn(async move {
                 while let Some(data) = rx.recv().await {
-                    publisher.send_one(data).await?;
+                    Publisher::<_, PipeMessage<Image>>::send_one(&publisher, data).await?;
                 }
                 Ok(())
             }),
@@ -203,7 +204,11 @@ impl Queue {
 
     async fn send(&self, data: Bytes) -> Result<()> {
         self.tx
-            .send(data)
+            .send(PipeMessage::with_payloads(
+                vec![PipePayload::new("image".into(), Some(data))],
+                // TODO: to be implemented
+                Image::default(),
+            ))
             .await
             .map_err(|error| anyhow!("Failed to send data: {error}"))
     }
