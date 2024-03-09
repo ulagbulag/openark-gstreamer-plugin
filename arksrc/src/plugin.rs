@@ -5,12 +5,9 @@ use gsark_common::{
     plugin::DynPlugin,
 };
 use gst::{
-    glib::{
-        self,
-        subclass::types::{ObjectSubclass, ObjectSubclassExt},
-    },
+    glib::{self, subclass::types::ObjectSubclass},
     subclass::prelude::GstObjectImpl,
-    Buffer, BufferRef, DebugCategory, ErrorMessage, FlowError,
+    BufferRef, DebugCategory, ErrorMessage,
 };
 use gst_base::subclass::{
     base_src::{BaseSrcImpl, CreateSuccess},
@@ -64,8 +61,10 @@ impl BaseSrcImpl for Plugin {
     #[inline]
     fn start(&self) -> Result<(), ErrorMessage> {
         BaseSrcImpl::unlock_stop(self)?;
-        self.runtime()
-            .block_on(<Self as ChannelSubclassExt>::start(self))
+        self.runtime().block_on(async {
+            <Self as ChannelSubclassExt>::start(self).await?;
+            <Self as ChannelSubclassExt>::start_recv(self).await
+        })
     }
 
     #[inline]
@@ -88,28 +87,6 @@ impl BaseSrcImpl for Plugin {
 
 impl PushSrcImpl for Plugin {
     fn create(&self, buffer: Option<&mut BufferRef>) -> Result<CreateSuccess, gst::FlowError> {
-        self.runtime().block_on(async {
-            // load a message
-            let message = match self.recv().await? {
-                Some(message) => message,
-                None => return Err(FlowError::Eos),
-            };
-
-            // TODO: is buffer used?
-            if buffer.is_some() {
-                todo!();
-            }
-
-            // create a stream buffer
-            let buffer = Buffer::from_slice(message);
-
-            gst::debug!(
-                crate::CAT,
-                imp: self,
-                "Produced buffer {buffer:?}",
-            );
-
-            Ok(CreateSuccess::NewBuffer(buffer))
-        })
+        self.runtime().block_on(self.recv_buffer(buffer))
     }
 }

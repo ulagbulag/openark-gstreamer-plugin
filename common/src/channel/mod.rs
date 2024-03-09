@@ -3,22 +3,23 @@ mod send;
 
 use std::future::Future;
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use ark_core::tracer;
 use async_trait::async_trait;
 use bytes::Bytes;
 use clap::Parser;
 use dash_openapi::image::Image;
-use dash_pipe_provider::{Name, PipeClient, PipeClientArgs, PipeMessage};
+use dash_pipe_provider::{Name, PipeClient, PipeClientArgs, PipeMessage, PipePayload};
 use gst::{
     error, error_msg,
     glib::{subclass::types::ObjectSubclassExt, ParamSpec, Value},
-    info, CoreError, ErrorMessage, FlowError,
+    info, Buffer, BufferRef, CoreError, ErrorMessage, FlowError, FlowSuccess,
 };
+use gst_video::gst_base::subclass::base_src::CreateSuccess;
 use tokio::{
     join,
     runtime::Runtime,
-    sync::{Mutex, RwLock, RwLockReadGuard},
+    sync::{MappedMutexGuard, Mutex, MutexGuard, RwLock, RwLockReadGuard},
 };
 
 use crate::plugin::Plugin;
@@ -83,14 +84,97 @@ where
         Ok(())
     }
 
+    async fn start_send(&self) -> Result<(), ErrorMessage> {
+        match self.channel().init_send(self).await {
+            Ok(Some(_)) => Ok(()),
+            Ok(None) => Err(error_msg!(
+                CoreError::Failed,
+                ["OpenARK client is not inited!"]
+            )),
+            Err(error) => Err(error_msg!(
+                CoreError::Failed,
+                ["Failed to start OpenARK sender: {error}"]
+            )),
+        }
+    }
+
+    async fn start_recv(&self) -> Result<(), ErrorMessage> {
+        match self.channel().init_recv(self).await {
+            Ok(Some(_)) => Ok(()),
+            Ok(None) => Err(error_msg!(
+                CoreError::Failed,
+                ["OpenARK client is not inited!"]
+            )),
+            Err(error) => Err(error_msg!(
+                CoreError::Failed,
+                ["Failed to start OpenARK receiver: {error}"]
+            )),
+        }
+    }
+
     #[inline]
     async fn recv(&self) -> Result<Option<Bytes>, FlowError> {
         self.channel().recv(self).await
     }
 
+    async fn recv_buffer(
+        &self,
+        buffer: Option<&mut BufferRef>,
+    ) -> Result<CreateSuccess, FlowError> {
+        // load a message
+        let message = match self.recv().await? {
+            Some(message) => message,
+            None => return Err(FlowError::Eos),
+        };
+
+        // TODO: is buffer used?
+        if buffer.is_some() {
+            todo!();
+        }
+
+        // create a stream buffer
+        let buffer = Buffer::from_slice(message);
+
+        gst::debug!(
+            self.cat(),
+            imp: self,
+            "Produced buffer {buffer:?}",
+        );
+
+        Ok(CreateSuccess::NewBuffer(buffer))
+    }
+
     #[inline]
     async fn send(&self, data: PipeMessage<Image>) -> Result<(), FlowError> {
         self.channel().send(self, data).await
+    }
+
+    async fn send_image(&self, key: String, buffer: &Buffer) -> Result<FlowSuccess, FlowError> {
+        // TODO: support non-image(video) data using sink Caps and cache it
+        // build a payload
+        let key_ref = format!("@data:image,{key}");
+        let payload = PipePayload::new(
+            key,
+            Some(Bytes::from(buffer.map_readable().unwrap().to_vec())),
+        );
+
+        // build a message
+        // TODO: to be implemented
+        let value = Image::default();
+        let message = PipeMessage::with_payloads(vec![payload], value);
+
+        // encode and send
+        self.send(message)
+            .await
+            .map(|()| FlowSuccess::Ok)
+            .map_err(|error| {
+                error!(
+                    self.cat(),
+                    imp: self,
+                    "{error}",
+                );
+                FlowError::Error
+            })
     }
 
     #[inline]
@@ -118,41 +202,51 @@ pub struct Channel {
 }
 
 impl Channel {
-    async fn recv(
+    async fn init_recv(
         &self,
         imp: &(impl ?Sized + ChannelSubclass + Plugin),
-    ) -> Result<Option<Bytes>, FlowError> {
+    ) -> Result<Option<MappedMutexGuard<'_, self::recv::Queue>>> {
+        fn unwrap_lock(
+            lock: MutexGuard<'_, Option<self::recv::Queue>>,
+        ) -> MappedMutexGuard<'_, self::recv::Queue> {
+            MutexGuard::map(lock, |lock| lock.as_mut().unwrap())
+        }
+
         let mut lock = self.recv.lock().await;
-        let queue = match lock.as_mut() {
-            Some(queue) => queue,
+        match lock.as_mut() {
+            Some(_) => Ok(Some(unwrap_lock(lock))),
             None => {
                 let builder_lock = self.builder.read().await;
                 match builder_lock.as_ref() {
                     Some(builder) => {
                         let client_lock = self.client.read().await;
-                        let client = assert_client(&client_lock, imp)?;
+                        let client = assert_client(&client_lock)?;
 
                         lock.replace(builder.build_receiver(client, imp).await?);
                         drop(client_lock);
                         drop(builder_lock);
 
-                        lock.as_mut().unwrap()
+                        Ok(Some(unwrap_lock(lock)))
                     }
-                    None => return Ok(None),
+                    None => Ok(None),
                 }
             }
-        };
-        Ok(queue.recv().await)
+        }
     }
 
-    async fn send(
+    async fn init_send(
         &self,
         imp: &(impl ?Sized + ChannelSubclass + Plugin),
-        data: PipeMessage<Image>,
-    ) -> Result<(), FlowError> {
+    ) -> Result<Option<RwLockReadGuard<'_, self::send::Queue>>> {
+        fn unwrap_lock(
+            lock: RwLockReadGuard<'_, Option<self::send::Queue>>,
+        ) -> RwLockReadGuard<'_, self::send::Queue> {
+            RwLockReadGuard::map(lock, |lock| lock.as_ref().unwrap())
+        }
+
         let lock = self.send.read().await;
         match lock.as_ref() {
-            Some(queue) => queue.send(imp, data).await,
+            Some(_) => Ok(Some(unwrap_lock(lock))),
             None => {
                 drop(lock);
 
@@ -160,19 +254,51 @@ impl Channel {
                 match builder_lock.as_ref() {
                     Some(builder) => {
                         let client_lock = self.client.read().await;
-                        let client = assert_client(&client_lock, imp)?;
+                        let client = assert_client(&client_lock)?;
 
                         let mut lock = self.send.write().await;
                         lock.replace(builder.build_sender(client, imp).await?);
                         drop(client_lock);
                         drop(builder_lock);
+                        drop(lock);
 
-                        let queue = lock.as_ref().unwrap();
-                        queue.send(imp, data).await
+                        let lock = self.send.read().await;
+                        Ok(Some(unwrap_lock(lock)))
                     }
-                    None => Err(FlowError::Eos),
+                    None => Ok(None),
                 }
             }
+        }
+    }
+
+    async fn recv(
+        &self,
+        imp: &(impl ?Sized + ChannelSubclass + Plugin),
+    ) -> Result<Option<Bytes>, FlowError> {
+        let maybe_queue = self.init_recv(imp).await.map_err(|error| {
+            error!(imp.cat(), imp: imp, "{error}");
+            FlowError::Error
+        })?;
+
+        match maybe_queue {
+            Some(mut queue) => Ok(queue.recv().await),
+            None => Ok(None),
+        }
+    }
+
+    async fn send(
+        &self,
+        imp: &(impl ?Sized + ChannelSubclass + Plugin),
+        data: PipeMessage<Image>,
+    ) -> Result<(), FlowError> {
+        let maybe_queue = self.init_send(imp).await.map_err(|error| {
+            error!(imp.cat(), imp: imp, "{error}");
+            FlowError::Error
+        })?;
+
+        match maybe_queue {
+            Some(queue) => queue.send(imp, data).await,
+            None => Err(FlowError::Eos),
         }
     }
 
@@ -334,10 +460,8 @@ async fn try_init_client() -> Result<PipeClient<Image>, ErrorMessage> {
 
 fn assert_client<'c>(
     client: &'c RwLockReadGuard<'c, Option<PipeClient<Image>>>,
-    imp: &(impl ?Sized + ChannelSubclass + Plugin),
-) -> Result<&'c PipeClient<Image>, FlowError> {
-    client.as_ref().ok_or_else(|| {
-        error!(imp.cat(), imp: imp, "OpenARK client is not inited!");
-        FlowError::Error
-    })
+) -> Result<&'c PipeClient<Image>> {
+    client
+        .as_ref()
+        .ok_or_else(|| anyhow!("OpenARK client is not inited!"))
 }
