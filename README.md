@@ -40,6 +40,12 @@ gst-launch-1.0 arksrc model="${MY_VIDEO_MODEL}" \
 ### Accelerating with NVIDIA GPU
 
 ```sh
+# Configure environment variables
+export GST_PLUGIN_PATH="$(pwd)/target/release"
+
+# Configure your test model
+MY_VIDEO_MODEL='image'
+
 # Test the video upstreaming (in the background)
 ## [nvvideoconvert]: load image into NVMM (NVIDIA GPU Memory Map)
 ## [nvjpegenc]: same as `jpegenc`, with NVIDIA GPU acceleration
