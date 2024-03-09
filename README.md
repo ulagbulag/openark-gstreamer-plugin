@@ -36,3 +36,21 @@ gst-launch-1.0 arksrc model="${MY_VIDEO_MODEL}" \
     ! jpegdec \
     ! autovideosink
 ```
+
+### Accelerating with NVIDIA GPU
+
+```sh
+# Test the video upstreaming (in the background)
+## [nvvideoconvert]: load image into NVMM (NVIDIA GPU Memory Map)
+## [nvjpegenc]: same as `jpegenc`, with NVIDIA GPU acceleration
+gst-launch-1.0 videotestsrc \
+    ! nvvideoconvert \
+    ! nvjpegenc \
+    ! arksink model="${MY_VIDEO_MODEL}" &
+
+# Test the video downstreaming
+## [nvjpegdec]: same as `jpegdec`, with NVIDIA GPU acceleration
+gst-launch-1.0 arksrc model="${MY_VIDEO_MODEL}" \
+    ! nvjpegdec \
+    ! autovideosink
+```
