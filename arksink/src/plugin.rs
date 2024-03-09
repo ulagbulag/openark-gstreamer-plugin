@@ -1,47 +1,31 @@
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use bytes::Bytes;
 use dash_openapi::image::Image;
-use dash_pipe_provider::{messengers::Publisher, PipeMessage, PipePayload};
-use gsark_common::client;
+use dash_pipe_provider::{PipeMessage, PipePayload};
+use gsark_common::{
+    args::Args,
+    channel::{Channel, ChannelSubclass, ChannelSubclassExt},
+    plugin::DynPlugin,
+};
 use gst::{
+    error,
     glib::{
         self,
         subclass::types::{ObjectSubclass, ObjectSubclassExt},
     },
     subclass::prelude::GstObjectImpl,
-    Buffer, CoreError, ErrorMessage, FlowError, FlowSuccess,
+    Buffer, DebugCategory, ErrorMessage, FlowError, FlowSuccess,
 };
 use gst_base::subclass::prelude::BaseSinkImpl;
-use tokio::{
-    runtime::Runtime,
-    sync::{mpsc, RwLock},
-    task::JoinHandle,
-};
-
-use crate::args::Args;
+use tokio::{runtime::Runtime, sync::RwLock};
 
 /// Struct containing all the element data
+#[derive(Default)]
 pub struct Plugin {
-    pub(crate) args: RwLock<Args>,
     counter: AtomicUsize,
-    queue: RwLock<Option<Queue>>,
-    runtime: Runtime,
-}
-
-impl Default for Plugin {
-    fn default() -> Self {
-        let runtime = Runtime::new().expect("Tokio runtime should be created");
-        let _guard = runtime.enter();
-
-        Self {
-            args: RwLock::default(),
-            counter: AtomicUsize::default(),
-            queue: RwLock::default(),
-            runtime,
-        }
-    }
+    inner: DynPlugin<Args>,
 }
 
 /// This trait registers our type with the GObject object system and
@@ -54,35 +38,49 @@ impl ObjectSubclass for Plugin {
     type ParentType = ::gst_base::BaseSink;
 }
 
+impl ::gsark_common::plugin::Plugin for Plugin {
+    #[inline]
+    fn cat(&self) -> DebugCategory {
+        *crate::CAT
+    }
+}
+
+impl ChannelSubclass for Plugin {
+    type Args = Args;
+
+    #[inline]
+    fn args(&self) -> &RwLock<<Self as ChannelSubclass>::Args> {
+        self.inner.args()
+    }
+
+    #[inline]
+    fn channel(&self) -> &Channel {
+        self.inner.channel()
+    }
+
+    #[inline]
+    fn runtime(&self) -> &Runtime {
+        self.inner.runtime()
+    }
+}
+
 impl GstObjectImpl for Plugin {}
 
 impl BaseSinkImpl for Plugin {
     fn start(&self) -> Result<(), ErrorMessage> {
         BaseSinkImpl::unlock_stop(self)?;
-        self.runtime.block_on(self.start_sender())?;
-
-        gst::info!(
-            crate::CAT,
-            imp: self,
-            "Started",
-        );
-        Ok(())
+        self.runtime()
+            .block_on(<Self as ChannelSubclassExt>::start(self))
     }
 
     fn stop(&self) -> Result<(), ErrorMessage> {
         BaseSinkImpl::unlock(self)?;
-        self.runtime.block_on(self.stop_sender())?;
-
-        gst::info!(
-            crate::CAT,
-            imp: self,
-            "Stopped",
-        );
-        Ok(())
+        self.runtime()
+            .block_on(<Self as ChannelSubclassExt>::stop(self))
     }
 
     fn render(&self, buffer: &Buffer) -> Result<FlowSuccess, FlowError> {
-        self.runtime.block_on(async {
+        self.runtime().block_on(async {
             // get data index
             let index = self.counter.fetch_add(1, Ordering::SeqCst);
 
@@ -109,7 +107,7 @@ impl BaseSinkImpl for Plugin {
                 .await
                 .map(|()| FlowSuccess::Ok)
                 .map_err(|error| {
-                    gst::error!(
+                    error!(
                         crate::CAT,
                         imp: self,
                         "{error}",
@@ -117,101 +115,5 @@ impl BaseSinkImpl for Plugin {
                     FlowError::Error
                 })
         })
-    }
-}
-
-impl Plugin {
-    async fn start_sender(&self) -> Result<(), ErrorMessage> {
-        let args = self.args.read().await;
-        let model = args.model().clone();
-        let otlp = args.otlp();
-        drop(args);
-
-        let mut queue = self.queue.write().await;
-        if queue.is_none() {
-            match Queue::try_new(&self.runtime, model, otlp).await {
-                Ok(q) => {
-                    queue.replace(q);
-                    Ok(())
-                }
-                Err(error) => Err(gst::error_msg!(
-                    CoreError::Failed,
-                    ["Failed to init OpenARK client: {error}"]
-                )),
-            }
-        } else {
-            Ok(())
-        }
-    }
-
-    async fn stop_sender(&self) -> Result<(), ErrorMessage> {
-        let mut queue = self.queue.write().await;
-        if let Some(result) = queue.take() {
-            result.stop().await.map_err(|error| {
-                gst::error_msg!(
-                    CoreError::Failed,
-                    ["Failed to deinit OpenARK client: {error}"]
-                )
-            })
-        } else {
-            Ok(())
-        }
-    }
-
-    async fn send(&self, data: PipeMessage<Image>) -> Result<(), FlowError> {
-        self.queue
-            .read()
-            .await
-            .as_ref()
-            .ok_or(FlowError::Eos)?
-            .send(data)
-            .await
-            .map_err(|error| {
-                gst::error!(
-                    crate::CAT,
-                    imp: self,
-                    "{error}",
-                );
-                FlowError::Eos
-            })
-    }
-}
-
-struct Queue {
-    producer: JoinHandle<Result<()>>,
-    tx: mpsc::Sender<PipeMessage<Image>>,
-}
-
-impl Queue {
-    async fn try_new(runtime: &Runtime, model: String, otlp: bool) -> Result<Self> {
-        let client = client::try_init(otlp).await?;
-        let publisher = client.publish(model.parse()?).await?;
-
-        let (tx, mut rx) = mpsc::channel(2);
-        Ok(Self {
-            producer: runtime.spawn(async move {
-                while let Some(data) = rx.recv().await {
-                    if let Err(error) =
-                        Publisher::<_, PipeMessage<Image>>::send_one(&publisher, data).await
-                    {
-                        gst::error!(crate::CAT, "Failed to send data: {error}",);
-                    }
-                }
-                Ok(())
-            }),
-            tx,
-        })
-    }
-
-    async fn send(&self, data: PipeMessage<Image>) -> Result<()> {
-        self.tx
-            .send(data)
-            .await
-            .map_err(|error| anyhow!("Failed to send data: {error}"))
-    }
-
-    async fn stop(self) -> Result<()> {
-        self.producer.abort();
-        self.producer.await.unwrap_or(Ok(()))
     }
 }

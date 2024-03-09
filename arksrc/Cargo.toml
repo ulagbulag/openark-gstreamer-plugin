@@ -20,11 +20,9 @@ version = { workspace = true }
 gsark-common = { path = "../common" }
 
 anyhow = { workspace = true }
-bytes = { workspace = true }
-dash-openapi = { workspace = true }
-dash-pipe-provider = { workspace = true }
+async-trait = { workspace = true }
 gst = { workspace = true }
 gst-base = { workspace = true }
 gst-video = { workspace = true }
 once-cell = { workspace = true }
-tokio = { workspace = true }
+tokio = { workspace = true, features = ["full"] }

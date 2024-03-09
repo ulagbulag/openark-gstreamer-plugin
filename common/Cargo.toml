@@ -17,8 +17,12 @@ version = { workspace = true }
 [dependencies]
 anyhow = { workspace = true }
 ark-core = { workspace = true }
+async-trait = { workspace = true }
+bytes = { workspace = true }
 clap = { workspace = true }
 dash-openapi = { workspace = true }
 dash-pipe-provider = { workspace = true }
 gst = { workspace = true }
 gst-video = { workspace = true }
+once-cell = { workspace = true }
+tokio = { workspace = true, features = ["sync"] }

@@ -1,51 +1,26 @@
-use std::time::Duration;
-
 use anyhow::Result;
-use bytes::Bytes;
-use dash_pipe_provider::messengers::Subscriber;
-use gsark_common::client;
+use gsark_common::{
+    args::Args,
+    channel::{Channel, ChannelSubclass, ChannelSubclassExt},
+    plugin::DynPlugin,
+};
 use gst::{
     glib::{
         self,
         subclass::types::{ObjectSubclass, ObjectSubclassExt},
     },
     subclass::prelude::GstObjectImpl,
-    Buffer, CoreError, ErrorMessage, FlowError,
+    Buffer, BufferRef, DebugCategory, ErrorMessage, FlowError,
 };
 use gst_base::subclass::{
     base_src::{BaseSrcImpl, CreateSuccess},
     prelude::PushSrcImpl,
 };
-use tokio::{
-    runtime::Runtime,
-    sync::{
-        mpsc::{self, error::SendTimeoutError},
-        Mutex, RwLock,
-    },
-    task::JoinHandle,
-};
-
-use crate::args::Args;
+use tokio::{runtime::Runtime, sync::RwLock};
 
 /// Struct containing all the element data
-pub struct Plugin {
-    pub(crate) args: RwLock<Args>,
-    queue: Mutex<Option<Queue>>,
-    runtime: Runtime,
-}
-
-impl Default for Plugin {
-    fn default() -> Self {
-        let runtime = Runtime::new().expect("Tokio runtime should be created");
-        let _guard = runtime.enter();
-
-        Self {
-            args: RwLock::default(),
-            queue: Mutex::default(),
-            runtime,
-        }
-    }
-}
+#[derive(Default)]
+pub struct Plugin(DynPlugin<Args>);
 
 /// This trait registers our type with the GObject object system and
 /// provides the entry points for creating a new instance and setting
@@ -57,50 +32,65 @@ impl ObjectSubclass for Plugin {
     type ParentType = ::gst_base::PushSrc;
 }
 
+impl ::gsark_common::plugin::Plugin for Plugin {
+    #[inline]
+    fn cat(&self) -> DebugCategory {
+        *crate::CAT
+    }
+}
+
+impl ChannelSubclass for Plugin {
+    type Args = Args;
+
+    #[inline]
+    fn args(&self) -> &RwLock<<Self as ChannelSubclass>::Args> {
+        self.0.args()
+    }
+
+    #[inline]
+    fn channel(&self) -> &Channel {
+        self.0.channel()
+    }
+
+    #[inline]
+    fn runtime(&self) -> &Runtime {
+        self.0.runtime()
+    }
+}
+
 impl GstObjectImpl for Plugin {}
 
 impl BaseSrcImpl for Plugin {
+    #[inline]
     fn start(&self) -> Result<(), ErrorMessage> {
         BaseSrcImpl::unlock_stop(self)?;
-        self.runtime.block_on(self.start_receiver())?;
-
-        gst::info!(
-            crate::CAT,
-            imp: self,
-            "Started",
-        );
-        Ok(())
+        self.runtime()
+            .block_on(<Self as ChannelSubclassExt>::start(self))
     }
 
+    #[inline]
     fn stop(&self) -> Result<(), ErrorMessage> {
         BaseSrcImpl::unlock(self)?;
-        self.runtime.block_on(self.stop_receiver())?;
-
-        gst::info!(
-            crate::CAT,
-            imp: self,
-            "Stopped",
-        );
-        Ok(())
+        self.runtime()
+            .block_on(<Self as ChannelSubclassExt>::stop(self))
     }
 
+    #[inline]
     fn is_seekable(&self) -> bool {
         false
     }
 
+    #[inline]
     fn size(&self) -> Option<u64> {
         None
     }
 }
 
 impl PushSrcImpl for Plugin {
-    fn create(
-        &self,
-        buffer: Option<&mut gst::BufferRef>,
-    ) -> Result<gst_base::subclass::base_src::CreateSuccess, gst::FlowError> {
-        self.runtime.block_on(async {
+    fn create(&self, buffer: Option<&mut BufferRef>) -> Result<CreateSuccess, gst::FlowError> {
+        self.runtime().block_on(async {
             // load a message
-            let message = match self.next().await {
+            let message = match self.recv().await? {
                 Some(message) => message,
                 None => return Err(FlowError::Eos),
             };
@@ -121,99 +111,5 @@ impl PushSrcImpl for Plugin {
 
             Ok(CreateSuccess::NewBuffer(buffer))
         })
-    }
-}
-
-impl Plugin {
-    async fn start_receiver(&self) -> Result<(), ErrorMessage> {
-        let args = self.args.read().await;
-        let model = args.model().clone();
-        let otlp = args.otlp();
-        drop(args);
-
-        let mut queue = self.queue.lock().await;
-        if queue.is_none() {
-            match Queue::try_new(&self.runtime, model, otlp).await {
-                Ok(q) => {
-                    queue.replace(q);
-                    Ok(())
-                }
-                Err(error) => Err(gst::error_msg!(
-                    CoreError::Failed,
-                    ["Failed to init OpenARK client: {error}"]
-                )),
-            }
-        } else {
-            Ok(())
-        }
-    }
-
-    async fn stop_receiver(&self) -> Result<(), ErrorMessage> {
-        let mut queue = self.queue.lock().await;
-        if let Some(result) = queue.take() {
-            result.stop().await.map_err(|error| {
-                gst::error_msg!(
-                    CoreError::Failed,
-                    ["Failed to deinit OpenARK client: {error}"]
-                )
-            })
-        } else {
-            Ok(())
-        }
-    }
-
-    async fn next(&self) -> Option<Bytes> {
-        self.queue.lock().await.as_mut()?.next().await
-    }
-}
-
-struct Queue {
-    producer: JoinHandle<Result<()>>,
-    rx: mpsc::Receiver<Bytes>,
-}
-
-impl Queue {
-    async fn try_new(runtime: &Runtime, model: String, otlp: bool) -> Result<Self> {
-        let client = client::try_init(otlp).await?;
-        let mut subscriber = client.subscribe(model.parse()?).await?;
-
-        let (tx, rx) = mpsc::channel(4);
-        Ok(Self {
-            producer: runtime.spawn(async move {
-                loop {
-                    match subscriber.read_one().await {
-                        Ok(Some(mut msg)) => {
-                            if let Some(data) = msg
-                                .payloads
-                                .pop()
-                                .and_then(|payload| payload.value().cloned())
-                            {
-                                match tx.send_timeout(data, Duration::from_millis(10)).await {
-                                    Ok(()) | Err(SendTimeoutError::Timeout(_)) => continue,
-                                    // Queue is destroying, stop sending.
-                                    Err(SendTimeoutError::Closed(_)) => break Ok(()),
-                                }
-                            }
-                        }
-                        // Subscriber is destroying, stop sending.
-                        Ok(None) => break Ok(()),
-                        Err(error) => {
-                            gst::error!(crate::CAT, "Failed to receive data: {error}",);
-                        }
-                    }
-                }
-            }),
-            rx,
-        })
-    }
-
-    async fn next(&mut self) -> Option<Bytes> {
-        self.rx.recv().await
-    }
-
-    async fn stop(mut self) -> Result<()> {
-        self.rx.close();
-        self.producer.abort();
-        self.producer.await.unwrap_or(Ok(()))
     }
 }

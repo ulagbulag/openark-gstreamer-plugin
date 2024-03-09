@@ -17,8 +17,9 @@ repository = "https://github.com/ulagbulag/openark-gstreamer-plugin"
 version = "0.1.0"
 
 [workspace.dependencies]
-ark-core = { git = "https://github.com/ulagbulag/OpenARK.git" }
 anyhow = { version = "1.0", features = ["backtrace"] }
+ark-core = { git = "https://github.com/ulagbulag/OpenARK.git" }
+async-trait = { version = "0.1" }
 bytes = { version = "1.5" }
 clap = { version = "4.5" }
 dash-openapi = { git = "https://github.com/ulagbulag/OpenARK.git" }
@@ -35,7 +36,7 @@ gst-video = { package = "gstreamer-video", version = "0.22" }
 num-traits = { version = "0.2" }
 once-cell = { package = "once_cell", version = "1.19" }
 serde-json = { package = "serde_json", version = "1.0" }
-tokio = { version = "1", features = ["full"] }
+tokio = { version = "1" }
 
 [patch.crates-io]
 # FIXME: Waiting for `opentelemetry-proto` to be released

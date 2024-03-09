@@ -1,16 +1,16 @@
 use std::fmt;
 
 use gst::{
-    glib::{self, subclass::types::ObjectSubclassExt, value::FromValue},
+    glib::{subclass::types::ObjectSubclassExt, value::FromValue, Value},
     DebugCategory,
 };
 
-pub fn set_value<'a, Plugin, T>(
+pub(super) fn set_value<'a, Plugin, T>(
     cat: &DebugCategory,
     plugin: &Plugin,
     name: &str,
     field: &mut T,
-    value: &'a glib::Value,
+    value: &'a Value,
 ) where
     Plugin: ObjectSubclassExt,
     T: fmt::Display + FromValue<'a>,
