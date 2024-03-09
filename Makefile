@@ -10,5 +10,11 @@ clean:
 
 init: install-dependencies
 
+install: init build
+	@./scripts/install_library.sh
+
 install-dependencies:
 	@./scripts/install_dependencies.sh
+
+uninstall:
+	@./scripts/uninstall_library.sh

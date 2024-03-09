@@ -8,6 +8,7 @@ function install_dependencies_ubuntu() {
         build-essential \
         cargo \
         clang \
+        gcc \
         gstreamer1.0-alsa \
         gstreamer1.0-gl \
         gstreamer1.0-gtk3 \
@@ -54,7 +55,7 @@ function install_dependencies() {
         install_dependencies_ubuntu ${@:1}
         ;;
     *)
-        "Unknown OS: ${os_name}" >&2
+        echo "Unknown OS: ${os_name}" >&2
         exit 1
         ;;
     esac
