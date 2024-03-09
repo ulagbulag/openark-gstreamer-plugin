@@ -16,5 +16,8 @@ install: init build
 install-dependencies:
 	@./scripts/install_dependencies.sh
 
+test:
+	cargo test --all --release --workspace
+
 uninstall:
 	@./scripts/uninstall_library.sh

@@ -1,0 +1,47 @@
+---
+name: Lint, Build, and Test Projects
+
+on: # yamllint disable-line rule:truthy
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+
+env:
+  CARGO_TERM_COLOR: always
+  DEBIAN_FRONTEND: noninteractive
+
+jobs:
+  lint-yaml:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Install dependencies
+        run: >
+          sudo apt-get update
+          && sudo apt-get install -y yamllint
+
+      - name: Lint
+        uses: ibiqlik/action-yamllint@v3
+        with:
+          config_file: ./.github/linters/yamllint.yaml
+
+  build-rust:
+    needs:
+      - lint-yaml
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Install dependencies
+        run: make init
+
+      - name: Run tests
+        run: cargo test --all --workspace --verbose
