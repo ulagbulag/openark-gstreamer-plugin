@@ -1,8 +1,8 @@
 use anyhow::Result;
 use gsark_common::{
     args::Args,
-    channel::{Channel, ChannelSubclass, ChannelSubclassExt},
-    plugin::DynPlugin,
+    net::{Channel, ChannelSubclass, ChannelSubclassExt},
+    plugin::{base::ArkSubclass, network::NetworkPlugin, PluginImpl},
 };
 use gst::{
     glib::{self, subclass::types::ObjectSubclass},
@@ -17,7 +17,9 @@ use tokio::{runtime::Runtime, sync::RwLock};
 
 /// Struct containing all the element data
 #[derive(Default)]
-pub struct Plugin(DynPlugin<Args>);
+pub struct Plugin {
+    network: NetworkPlugin<Args>,
+}
 
 /// This trait registers our type with the GObject object system and
 /// provides the entry points for creating a new instance and setting
@@ -29,29 +31,31 @@ impl ObjectSubclass for Plugin {
     type ParentType = ::gst_base::PushSrc;
 }
 
-impl ::gsark_common::plugin::Plugin for Plugin {
+impl PluginImpl for Plugin {
     #[inline]
     fn cat(&self) -> DebugCategory {
         *crate::CAT
     }
 }
 
-impl ChannelSubclass for Plugin {
+impl ArkSubclass for Plugin {
     type Args = Args;
 
     #[inline]
-    fn args(&self) -> &RwLock<<Self as ChannelSubclass>::Args> {
-        self.0.args()
-    }
-
-    #[inline]
-    fn channel(&self) -> &Channel {
-        self.0.channel()
+    fn args(&self) -> &RwLock<<Self as ArkSubclass>::Args> {
+        self.network.args()
     }
 
     #[inline]
     fn runtime(&self) -> &Runtime {
-        self.0.runtime()
+        self.network.runtime()
+    }
+}
+
+impl ChannelSubclass for Plugin {
+    #[inline]
+    fn channel(&self) -> &Channel {
+        self.network.channel()
     }
 }
 

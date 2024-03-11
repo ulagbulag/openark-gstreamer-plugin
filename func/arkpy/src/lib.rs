@@ -2,13 +2,13 @@ mod args;
 mod element;
 mod plugin;
 
-use gst::{glib, prelude::StaticType, Element, Object, Rank};
+use gst::{glib, prelude::StaticType, DebugCategory, DebugColorFlags, Element, Object, Rank};
 use once_cell::sync::Lazy;
 
 pub mod metadata {
-    pub const CLASS: &str = "Source/Network";
-    pub const CLASS_NAME: &str = "ArkSrc";
-    pub const LONG_NAME: &str = "OpenARK message receiver";
+    pub const CLASS: &str = "Filter/Effect";
+    pub const CLASS_NAME: &str = "ArkPy";
+    pub const LONG_NAME: &str = "OpenARK python function";
 
     pub const AUTHORS: &str = env!("CARGO_PKG_AUTHORS");
     pub const DESCRIPTION: &str = env!("CARGO_PKG_DESCRIPTION");
@@ -40,10 +40,10 @@ pub fn register(plugin: &gst::Plugin) -> Result<(), glib::BoolError> {
 
 // This module contains the private implementation details of our element
 //
-pub(crate) static CAT: Lazy<gst::DebugCategory> = Lazy::new(|| {
-    gst::DebugCategory::new(
+pub(crate) static CAT: Lazy<DebugCategory> = Lazy::new(|| {
+    DebugCategory::new(
         crate::metadata::NAME,
-        gst::DebugColorFlags::empty(),
+        DebugColorFlags::empty(),
         Some(crate::metadata::DESCRIPTION),
     )
 });

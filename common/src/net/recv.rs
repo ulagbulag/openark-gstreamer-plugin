@@ -8,7 +8,7 @@ use tokio::{
     task::JoinHandle,
 };
 
-use crate::plugin::Plugin;
+use crate::plugin::PluginImpl;
 
 pub(super) struct Queue {
     cat: DebugCategory,
@@ -19,7 +19,7 @@ pub(super) struct Queue {
 impl Queue {
     pub(super) async fn try_new<C>(args: super::QueueArgs<'_, C>) -> Result<Self, FlowError>
     where
-        C: ?Sized + super::ChannelSubclass + Plugin,
+        C: ?Sized + super::ChannelSubclassExt + PluginImpl,
     {
         let mut subscriber = args
             .call_client(|client, model| async { client.subscribe(model).await })
@@ -65,7 +65,7 @@ impl Queue {
         self.rx.recv().await
     }
 
-    pub(super) async fn stop(self, imp: &(impl ?Sized + Plugin)) {
+    pub(super) async fn stop(self, imp: &(impl ?Sized + PluginImpl)) {
         let Self {
             cat,
             producer,

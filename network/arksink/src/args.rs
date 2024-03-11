@@ -1,7 +1,4 @@
-use gsark_common::{
-    args::Args,
-    channel::{ChannelArgs, ChannelSubclass},
-};
+use gsark_common::{args::Args, net::ChannelArgs, plugin::base::ArkSubclass};
 use gst::glib::{subclass::object::ObjectImpl, ParamSpec, Value};
 
 /// Implementation of glib::Object virtual methods

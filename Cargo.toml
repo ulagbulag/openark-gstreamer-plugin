@@ -1,5 +1,5 @@
 [workspace]
-members = [".", "arksink", "arksrc", "common"]
+members = [".", "common", "func/arkpy", "network/arksink", "network/arksrc"]
 resolver = "2"
 
 [workspace.package]
@@ -28,6 +28,7 @@ dash-pipe-provider = { git = "https://github.com/ulagbulag/OpenARK.git", default
     "nats",      # messenger
     "s3",        # storage
 ] }
+dash-pipe-function-python-provider = { git = "https://github.com/ulagbulag/OpenARK.git" }
 gst = { package = "gstreamer", version = "0.22" }
 gst-audio = { package = "gstreamer-audio", version = "0.22" }
 gst-base = { package = "gstreamer-base", version = "0.22" }
@@ -64,9 +65,12 @@ crate-type = ["cdylib"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-# arkfunc = { path = "arkfunc" }
-arksink = { path = "arksink" }
-arksrc = { path = "arksrc" }
+# Functions
+arkpy = { path = "func/arkpy" }
+
+# Network
+arksink = { path = "network/arksink" }
+arksrc = { path = "network/arksrc" }
 
 gst = { workspace = true }
 

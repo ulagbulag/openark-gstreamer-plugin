@@ -2,7 +2,7 @@ mod args;
 mod element;
 mod plugin;
 
-use gst::{glib, prelude::StaticType, Element, Object, Rank};
+use gst::{glib, prelude::StaticType, DebugCategory, DebugColorFlags, Element, Object, Rank};
 use once_cell::sync::Lazy;
 
 pub mod metadata {
@@ -40,10 +40,10 @@ pub fn register(plugin: &gst::Plugin) -> Result<(), glib::BoolError> {
 
 // This module contains the private implementation details of our element
 //
-pub(crate) static CAT: Lazy<gst::DebugCategory> = Lazy::new(|| {
-    gst::DebugCategory::new(
+pub(crate) static CAT: Lazy<DebugCategory> = Lazy::new(|| {
+    DebugCategory::new(
         crate::metadata::NAME,
-        gst::DebugColorFlags::empty(),
+        DebugColorFlags::empty(),
         Some(crate::metadata::DESCRIPTION),
     )
 });

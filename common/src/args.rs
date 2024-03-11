@@ -3,7 +3,7 @@ use gst::glib::{
 };
 use once_cell::sync::Lazy;
 
-use crate::{channel::ChannelArgs, plugin::Plugin, value::set_value};
+use crate::{net::ChannelArgs, plugin::PluginImpl, value::set_value};
 
 /// Plugin property value storage
 #[derive(Clone, Debug)]
@@ -62,22 +62,22 @@ impl ChannelArgs for Args {
 
     fn set_property(
         &mut self,
-        plugin: &(impl ?Sized + Plugin),
+        plugin: &(impl ?Sized + PluginImpl),
         _id: usize,
         value: &Value,
         pspec: &ParamSpec,
     ) {
         let name = pspec.name();
         match name {
-            "model" => set_value(&plugin.cat(), plugin, name, &mut self.model, value),
-            "otlp" => set_value(&plugin.cat(), plugin, name, &mut self.otlp, value),
+            "model" => set_value(plugin, name, &mut self.model, value),
+            "otlp" => set_value(plugin, name, &mut self.otlp, value),
             _ => unimplemented!(),
         }
     }
 }
 
 impl Args {
-    fn as_params(&self) -> Vec<ParamSpec> {
+    pub fn as_params(&self) -> Vec<ParamSpec> {
         vec![
             ParamSpecString::builder("model")
                 .nick("Model")
@@ -93,4 +93,4 @@ impl Args {
     }
 }
 
-type Params = Lazy<Vec<ParamSpec>>;
+pub type Params = Lazy<Vec<ParamSpec>>;

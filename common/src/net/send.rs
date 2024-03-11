@@ -3,7 +3,7 @@ use dash_pipe_provider::{messengers::Publisher, PipeMessage};
 use gst::{error, glib::subclass::types::ObjectSubclassExt, DebugCategory, FlowError};
 use tokio::{sync::mpsc, task::JoinHandle};
 
-use crate::plugin::Plugin;
+use crate::plugin::PluginImpl;
 
 pub(super) struct Queue {
     cat: DebugCategory,
@@ -14,7 +14,7 @@ pub(super) struct Queue {
 impl Queue {
     pub(super) async fn try_new<C>(args: super::QueueArgs<'_, C>) -> Result<Self, FlowError>
     where
-        C: ?Sized + super::ChannelSubclass + Plugin,
+        C: ?Sized + super::ChannelSubclassExt + PluginImpl,
     {
         let publisher = args
             .call_client(|client, model| async { client.publish(model).await })
@@ -42,7 +42,7 @@ impl Queue {
 
     pub(super) async fn send(
         &self,
-        imp: &(impl ?Sized + Plugin),
+        imp: &(impl ?Sized + PluginImpl),
         data: PipeMessage<Image>,
     ) -> Result<(), FlowError> {
         self.tx.send(data).await.map_err(|error| {
@@ -55,7 +55,7 @@ impl Queue {
         })
     }
 
-    pub(super) async fn stop(self, imp: &(impl ?Sized + Plugin)) {
+    pub(super) async fn stop(self, imp: &(impl ?Sized + PluginImpl)) {
         let Self { cat, producer, tx } = self;
 
         producer.abort();

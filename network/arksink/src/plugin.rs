@@ -3,8 +3,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use anyhow::Result;
 use gsark_common::{
     args::Args,
-    channel::{Channel, ChannelSubclass, ChannelSubclassExt},
-    plugin::DynPlugin,
+    net::{Channel, ChannelSubclass, ChannelSubclassExt},
+    plugin::{base::ArkSubclass, network::NetworkPlugin, PluginImpl},
 };
 use gst::{
     glib::{self, subclass::types::ObjectSubclass},
@@ -18,7 +18,7 @@ use tokio::{runtime::Runtime, sync::RwLock};
 #[derive(Default)]
 pub struct Plugin {
     counter: AtomicU64,
-    inner: DynPlugin<Args>,
+    network: NetworkPlugin<Args>,
 }
 
 /// This trait registers our type with the GObject object system and
@@ -31,29 +31,31 @@ impl ObjectSubclass for Plugin {
     type ParentType = ::gst_base::BaseSink;
 }
 
-impl ::gsark_common::plugin::Plugin for Plugin {
+impl PluginImpl for Plugin {
     #[inline]
     fn cat(&self) -> DebugCategory {
         *crate::CAT
     }
 }
 
-impl ChannelSubclass for Plugin {
+impl ArkSubclass for Plugin {
     type Args = Args;
 
     #[inline]
-    fn args(&self) -> &RwLock<<Self as ChannelSubclass>::Args> {
-        self.inner.args()
-    }
-
-    #[inline]
-    fn channel(&self) -> &Channel {
-        self.inner.channel()
+    fn args(&self) -> &RwLock<<Self as ArkSubclass>::Args> {
+        self.network.args()
     }
 
     #[inline]
     fn runtime(&self) -> &Runtime {
-        self.inner.runtime()
+        self.network.runtime()
+    }
+}
+
+impl ChannelSubclass for Plugin {
+    #[inline]
+    fn channel(&self) -> &Channel {
+        self.network.channel()
     }
 }
 
@@ -86,6 +88,6 @@ impl BaseSinkImpl for Plugin {
         // build a payload
         let key = format!("{index:06}{ext}");
 
-        self.runtime().block_on(self.send_image(key, buffer))
+        self.runtime().block_on(self.send_buffer(key, buffer))
     }
 }

@@ -1,23 +1,13 @@
-use gst::{glib::subclass::types::ObjectSubclass, DebugCategory};
 use tokio::{runtime::Runtime, sync::RwLock};
 
-use crate::channel::{Channel, ChannelArgs, ChannelSubclass};
+use crate::net::ChannelArgs;
 
-pub trait Plugin
-where
-    Self: ObjectSubclass,
-{
-    fn cat(&self) -> DebugCategory;
-}
-
-/// Struct containing all the element data
-pub struct DynPlugin<Args> {
+pub struct BasePlugin<Args> {
     args: RwLock<Args>,
-    channel: Channel,
     runtime: Runtime,
 }
 
-impl<Args> Default for DynPlugin<Args>
+impl<Args> Default for BasePlugin<Args>
 where
     Args: Default,
 {
@@ -27,13 +17,20 @@ where
 
         Self {
             args: RwLock::default(),
-            channel: Channel::default(),
             runtime,
         }
     }
 }
 
-impl<Args> ChannelSubclass for DynPlugin<Args>
+pub trait ArkSubclass {
+    type Args: ChannelArgs;
+
+    fn args(&self) -> &RwLock<<Self as ArkSubclass>::Args>;
+
+    fn runtime(&self) -> &Runtime;
+}
+
+impl<Args> ArkSubclass for BasePlugin<Args>
 where
     Args: ChannelArgs,
 {
@@ -42,11 +39,6 @@ where
     #[inline]
     fn args(&self) -> &RwLock<Self::Args> {
         &self.args
-    }
-
-    #[inline]
-    fn channel(&self) -> &Channel {
-        &self.channel
     }
 
     #[inline]

@@ -11,18 +11,17 @@ use clap::Parser;
 use dash_openapi::image::Image;
 use dash_pipe_provider::{Name, PipeClient, PipeClientArgs, PipeMessage, PipePayload};
 use gst::{
-    error, error_msg,
+    debug, error, error_msg,
     glib::{subclass::types::ObjectSubclassExt, ParamSpec, Value},
     info, Buffer, BufferRef, CoreError, ErrorMessage, FlowError, FlowSuccess,
 };
 use gst_video::gst_base::subclass::base_src::CreateSuccess;
 use tokio::{
     join,
-    runtime::Runtime,
     sync::{MappedMutexGuard, Mutex, MutexGuard, RwLock, RwLockReadGuard},
 };
 
-use crate::plugin::Plugin;
+use crate::plugin::{base::ArkSubclass, PluginImpl};
 
 pub trait ChannelArgs
 where
@@ -43,27 +42,24 @@ where
     /// at any time from any thread.
     fn set_property(
         &mut self,
-        plugin: &(impl ?Sized + Plugin),
+        plugin: &(impl ?Sized + PluginImpl),
         id: usize,
         value: &Value,
         pspec: &ParamSpec,
     );
 }
 
-pub trait ChannelSubclass {
-    type Args: ChannelArgs;
-
-    fn args(&self) -> &RwLock<<Self as ChannelSubclass>::Args>;
-
+pub trait ChannelSubclass
+where
+    Self: ArkSubclass,
+{
     fn channel(&self) -> &Channel;
-
-    fn runtime(&self) -> &Runtime;
 }
 
 #[async_trait]
 pub trait ChannelSubclassExt
 where
-    Self: ChannelSubclass + Plugin,
+    Self: ChannelSubclass + PluginImpl,
 {
     async fn start(&self) -> Result<(), ErrorMessage> {
         let args = self.args().read().await;
@@ -135,7 +131,7 @@ where
         // create a stream buffer
         let buffer = Buffer::from_slice(message);
 
-        gst::debug!(
+        debug!(
             self.cat(),
             imp: self,
             "Produced buffer {buffer:?}",
@@ -149,7 +145,7 @@ where
         self.channel().send(self, data).await
     }
 
-    async fn send_image(&self, key: String, buffer: &Buffer) -> Result<FlowSuccess, FlowError> {
+    async fn send_buffer(&self, key: String, buffer: &Buffer) -> Result<FlowSuccess, FlowError> {
         // TODO: support non-image(video) data using sink Caps and cache it
         // build a payload
         let key_ref = format!("@data:image,{key}");
@@ -191,7 +187,7 @@ where
 }
 
 #[async_trait]
-impl<T> ChannelSubclassExt for T where Self: ChannelSubclass + Plugin {}
+impl<T> ChannelSubclassExt for T where Self: ChannelSubclass + PluginImpl {}
 
 #[derive(Default)]
 pub struct Channel {
@@ -204,7 +200,7 @@ pub struct Channel {
 impl Channel {
     async fn init_recv(
         &self,
-        imp: &(impl ?Sized + ChannelSubclass + Plugin),
+        imp: &(impl ?Sized + ChannelSubclassExt + PluginImpl),
     ) -> Result<Option<MappedMutexGuard<'_, self::recv::Queue>>> {
         fn unwrap_lock(
             lock: MutexGuard<'_, Option<self::recv::Queue>>,
@@ -236,7 +232,7 @@ impl Channel {
 
     async fn init_send(
         &self,
-        imp: &(impl ?Sized + ChannelSubclass + Plugin),
+        imp: &(impl ?Sized + ChannelSubclassExt + PluginImpl),
     ) -> Result<Option<RwLockReadGuard<'_, self::send::Queue>>> {
         fn unwrap_lock(
             lock: RwLockReadGuard<'_, Option<self::send::Queue>>,
@@ -273,7 +269,7 @@ impl Channel {
 
     async fn recv(
         &self,
-        imp: &(impl ?Sized + ChannelSubclass + Plugin),
+        imp: &(impl ?Sized + ChannelSubclassExt + PluginImpl),
     ) -> Result<Option<Bytes>, FlowError> {
         let maybe_queue = self.init_recv(imp).await.map_err(|error| {
             error!(imp.cat(), imp: imp, "{error}");
@@ -288,7 +284,7 @@ impl Channel {
 
     async fn send(
         &self,
-        imp: &(impl ?Sized + ChannelSubclass + Plugin),
+        imp: &(impl ?Sized + ChannelSubclassExt + PluginImpl),
         data: PipeMessage<Image>,
     ) -> Result<(), FlowError> {
         let maybe_queue = self.init_send(imp).await.map_err(|error| {
@@ -302,7 +298,7 @@ impl Channel {
         }
     }
 
-    async fn stop(&self, imp: &(impl ?Sized + ChannelSubclass + Plugin)) {
+    async fn stop(&self, imp: &(impl ?Sized + ChannelSubclassExt + PluginImpl)) {
         let stop_recv = async {
             let maybe_queue = {
                 let mut lock = self.recv.lock().await;
@@ -367,7 +363,7 @@ impl ChannelBuilder {
     async fn build_receiver<'c>(
         &self,
         client: &'c PipeClient<Image>,
-        imp: &(impl ?Sized + ChannelSubclass + Plugin),
+        imp: &(impl ?Sized + ChannelSubclassExt + PluginImpl),
     ) -> Result<self::recv::Queue, FlowError> {
         let Self { model, otlp: _ } = self;
 
@@ -384,7 +380,7 @@ impl ChannelBuilder {
     async fn build_sender<'c>(
         &self,
         client: &'c PipeClient<Image>,
-        imp: &(impl ?Sized + ChannelSubclass + Plugin),
+        imp: &(impl ?Sized + ChannelSubclassExt + PluginImpl),
     ) -> Result<self::send::Queue, FlowError> {
         let Self { model, otlp: _ } = self;
 
@@ -411,7 +407,7 @@ where
 
 impl<'c, C> QueueArgs<'c, C>
 where
-    C: ?Sized + ChannelSubclass + Plugin,
+    C: ?Sized + ChannelSubclassExt + PluginImpl,
 {
     async fn call_client<F, Fut, R>(&self, f: F) -> Result<R, FlowError>
     where
