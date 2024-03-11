@@ -1,0 +1,61 @@
+# Copyright (c) 2023 Ho Kim (ho.kim@ulagbulag.io). All rights reserved.
+# Use of this source code is governed by a GPL-3-style license that can be
+# found in the LICENSE file.
+
+# Configure environment variables
+ARG PYTORCH_RELEASE="23.08"
+ARG PYTHON_VERSION="3"
+
+# Be ready for serving
+FROM "nvcr.io/nvidia/pytorch:${PYTORCH_RELEASE}-py${PYTHON_VERSION}" as server
+
+# Load user-specific environment variables
+ARG USER_GID
+ARG USER_NAME
+ARG USER_SHELL
+ARG USER_SUDO
+ARG USER_UID
+
+ENV SHELL="${USER_SHELL}"
+ENV USER_SHELL="${USER_SHELL}"
+
+# Package Manager Configuration
+ARG DEBIAN_FRONTEND='noninteractive'
+
+# SystemD Configuration
+ENV container docker
+STOPSIGNAL SIGRTMIN+3
+
+# Client Configuration
+ARG WORKSPACE="/opt/openark/gstreamer"
+WORKDIR "${WORKSPACE}"
+ENTRYPOINT [ "/usr/bin/env" ]
+CMD [ "/usr/bin/bash" ]
+
+# Fix base image bugs
+RUN true \
+    # NVIDIA
+    ## Fix library link issue (duplicated library binaries)
+    && ( which find >/dev/null \
+    && /sbin/ldconfig.real 2>&1 | grep -Po '/usr/local/lib/lib[a-z0-9_.]+' | xargs rm -f \
+    && /sbin/ldconfig.real ) \
+    || true
+
+# Configure package manager
+RUN dst='/etc/apt/apt.conf.d/docker-minimal' \
+    && echo 'APT::Install-Recommends "false";' >"${dst}" \
+    && echo 'APT::Install-Suggests "false";' >>"${dst}"
+
+# Install dependencies
+ADD ./scripts "${WORKSPACE}"
+ENV DEEPSTREAM_INSTALL="true"
+RUN "${WORKSPACE}/install_dependencies.sh" \
+    # Cleanup
+    && apt-get clean all \
+    && rm -rf /var/lib/apt/lists/* \
+    && rm -rf "${WORKSPACE}"
+
+# Install library
+ADD . "${WORKSPACE}"
+RUN make build \
+    && "${WORKSPACE}/scripts/install_library.sh"

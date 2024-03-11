@@ -11,10 +11,10 @@ clean:
 init: install-dependencies
 
 install: init build
-	@./scripts/install_library.sh
+	@sudo ./scripts/install_library.sh
 
 install-dependencies:
-	@./scripts/install_dependencies.sh
+	@sudo ./scripts/install_dependencies.sh
 
 test:
 	cargo test --all --release --workspace

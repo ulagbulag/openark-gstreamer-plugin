@@ -3,6 +3,9 @@
 # Use of this source code is governed by a GPL-3-style license that can be
 # found in the LICENSE file.
 
+# Prehibit errors
+set -e -o pipefail
+
 function install_library() {
     # Collect informations
     local gst_version='1.0' # NOTE: hardcoded!
