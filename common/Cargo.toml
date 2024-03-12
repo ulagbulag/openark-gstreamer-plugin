@@ -25,4 +25,5 @@ dash-pipe-provider = { workspace = true }
 gst = { workspace = true }
 gst-video = { workspace = true }
 once-cell = { workspace = true }
+schemars = { workspace = true }
 tokio = { workspace = true, features = ["sync"] }

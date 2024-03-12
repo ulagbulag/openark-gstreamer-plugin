@@ -16,12 +16,16 @@ use gst::{
     info, Buffer, BufferRef, CoreError, ErrorMessage, FlowError, FlowSuccess,
 };
 use gst_video::gst_base::subclass::base_src::CreateSuccess;
+use schemars::JsonSchema;
 use tokio::{
     join,
-    sync::{MappedMutexGuard, Mutex, MutexGuard, RwLock, RwLockReadGuard},
+    sync::{MappedMutexGuard, Mutex, RwLock, RwLockReadGuard},
 };
 
-use crate::plugin::{base::ArkSubclass, PluginImpl};
+use crate::{
+    plugin::{base::ArkSubclass, PluginImpl},
+    sync,
+};
 
 pub trait ChannelArgs
 where
@@ -146,6 +150,7 @@ where
     }
 
     async fn send_buffer(&self, key: String, buffer: &Buffer) -> Result<FlowSuccess, FlowError> {
+        // TODO: handle other media types (audio, JSON, plain, ...)
         // TODO: support non-image(video) data using sink Caps and cache it
         // build a payload
         let key_ref = format!("@data:image,{key}");
@@ -155,6 +160,7 @@ where
         );
 
         // build a message
+        // TODO: handle other media types (audio, JSON, plain, ...)
         // TODO: to be implemented
         let value = Image::default();
         let message = PipeMessage::with_payloads(vec![payload], value);
@@ -202,15 +208,9 @@ impl Channel {
         &self,
         imp: &(impl ?Sized + ChannelSubclassExt + PluginImpl),
     ) -> Result<Option<MappedMutexGuard<'_, self::recv::Queue>>> {
-        fn unwrap_lock(
-            lock: MutexGuard<'_, Option<self::recv::Queue>>,
-        ) -> MappedMutexGuard<'_, self::recv::Queue> {
-            MutexGuard::map(lock, |lock| lock.as_mut().unwrap())
-        }
-
         let mut lock = self.recv.lock().await;
         match lock.as_mut() {
-            Some(_) => Ok(Some(unwrap_lock(lock))),
+            Some(_) => Ok(Some(sync::mutex::unwrap_lock(lock))),
             None => {
                 let builder_lock = self.builder.read().await;
                 match builder_lock.as_ref() {
@@ -222,7 +222,7 @@ impl Channel {
                         drop(client_lock);
                         drop(builder_lock);
 
-                        Ok(Some(unwrap_lock(lock)))
+                        Ok(Some(sync::mutex::unwrap_lock(lock)))
                     }
                     None => Ok(None),
                 }
@@ -234,15 +234,9 @@ impl Channel {
         &self,
         imp: &(impl ?Sized + ChannelSubclassExt + PluginImpl),
     ) -> Result<Option<RwLockReadGuard<'_, self::send::Queue>>> {
-        fn unwrap_lock(
-            lock: RwLockReadGuard<'_, Option<self::send::Queue>>,
-        ) -> RwLockReadGuard<'_, self::send::Queue> {
-            RwLockReadGuard::map(lock, |lock| lock.as_ref().unwrap())
-        }
-
         let lock = self.send.read().await;
         match lock.as_ref() {
-            Some(_) => Ok(Some(unwrap_lock(lock))),
+            Some(_) => Ok(Some(sync::rwlock::unwrap_lock(lock))),
             None => {
                 drop(lock);
 
@@ -259,7 +253,7 @@ impl Channel {
                         drop(lock);
 
                         let lock = self.send.read().await;
-                        Ok(Some(unwrap_lock(lock)))
+                        Ok(Some(sync::rwlock::unwrap_lock(lock)))
                     }
                     None => Ok(None),
                 }
@@ -436,7 +430,10 @@ where
     }
 }
 
-async fn try_init_client() -> Result<PipeClient<Image>, ErrorMessage> {
+pub async fn try_init_client<T>() -> Result<PipeClient<T>, ErrorMessage>
+where
+    T: JsonSchema,
+{
     // Do not parse arguments from command line,
     // only use the environment variables.
     let args = PipeClientArgs::try_parse_from::<_, &str>([]).map_err(|error| {

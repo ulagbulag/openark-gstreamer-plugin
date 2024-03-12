@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+use dash_pipe_function_python_provider::FunctionArgs;
 use gsark_common::{
     args::Params,
     net::ChannelArgs,
@@ -96,13 +97,12 @@ impl ObjectImpl for crate::plugin::Plugin {
 }
 
 impl Args {
-    pub fn as_params(&self) -> Vec<ParamSpec> {
+    fn as_params(&self) -> Vec<ParamSpec> {
         let mut params = self.common.as_params();
         params.push(
             ParamSpecString::builder("file")
                 .nick("Pythonfile")
                 .blurb("Python script file path")
-                .default_value(None)
                 .build(),
         );
         params.push(
@@ -113,5 +113,12 @@ impl Args {
                 .build(),
         );
         params
+    }
+
+    pub fn build(&self) -> Option<FunctionArgs> {
+        Some(FunctionArgs {
+            python_script: self.file.clone()?,
+            python_tick_method: self.method.clone(),
+        })
     }
 }

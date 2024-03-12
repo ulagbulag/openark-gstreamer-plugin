@@ -80,10 +80,12 @@ impl BaseSinkImpl for Plugin {
         // get data index
         let index = self.counter.fetch_add(1, Ordering::SeqCst);
 
+        // TODO: handle other media types (audio, JSON, plain, ...)
         // TODO: support non-image(video) data using sink Caps and cache it
         // parse data extension
         let ext = ".jpg";
 
+        // TODO: handle other media types (audio, JSON, plain, ...)
         // TODO: support non-image(video) data using sink Caps and cache it
         // build a payload
         let key = format!("{index:06}{ext}");

@@ -36,6 +36,7 @@ gst-plugin-version-helper = { version = "0.8" }
 gst-video = { package = "gstreamer-video", version = "0.22" }
 num-traits = { version = "0.2" }
 once-cell = { package = "once_cell", version = "1.19" }
+schemars = { version = "0.8" }
 serde-json = { package = "serde_json", version = "1.0" }
 tokio = { version = "1" }
 
