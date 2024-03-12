@@ -57,5 +57,6 @@ RUN "${WORKSPACE}/install_dependencies.sh" \
 
 # Install library
 ADD . "${WORKSPACE}"
+ENV RUSTUP_TOOLCHAIN="stable"
 RUN make build \
     && "${WORKSPACE}/scripts/install_library.sh"

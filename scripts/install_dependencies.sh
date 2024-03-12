@@ -34,8 +34,9 @@ function install_dependencies_ubuntu() {
         libgstreamer-plugins-base1.0-dev \
         libgstrtspserver-1.0-dev \
         libgtk2.0-dev \
-        libjansson4 \
         libhwloc-dev \
+        libjansson4 \
+        libopenblas-dev \
         libprotobuf-dev \
         libprotoc-dev \
         libssl3 \
