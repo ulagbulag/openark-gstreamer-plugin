@@ -47,7 +47,8 @@ function install_dependencies_ubuntu() {
         make \
         mold \
         nasm \
-        pkg-config
+        pkg-config \
+        protobuf-compiler
 
     if [ "x${DEEPSTREAM_INSTALL}" = 'xtrue' ]; then
         install_dependencies_ubuntu_deepstream
